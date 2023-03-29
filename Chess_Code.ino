@@ -3,6 +3,8 @@
 #include <LiquidCrystal_I2C.h>
 
 LiquidCrystal_I2C lcd(0x27,20,4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+
+//Defining all the variables.
 const int rightPin = 3;
 const int upPin = 4;
 const int sPin = 5;
@@ -42,12 +44,12 @@ int p2sec = 0;
 int p2min = 0;
 
 
-int hold = 0;
-int pauseState = true;
+int pauseState = false;
+int startState = true;
 
 unsigned long previousMillis = 0;
 
-
+//Displays the menu during setup
 void pMenu() {
   lcd.clear();
   lcd.print("Set up");
@@ -74,6 +76,26 @@ void pMenu() {
   } else if(place == 4) {
     lcd.print("Inc");
   }
+  
+  if(t10min > 5) {
+    t10min = 0;
+  }
+  if(tmin > 9) {
+    tmin = 0;
+  }
+  if(t10sec > 5) {
+    t10sec = 0;
+  }
+  if(tsec > 9) {
+    tsec = 0;
+  }
+
+  if(inc > 15) {
+    inc = 0;
+  }
+  if(place > 4) {
+    place = 0;
+  }
 
 
   lcd.setCursor(8,1);
@@ -88,6 +110,7 @@ void pMenu() {
   }
 }
 
+//Converts the time to a usable integer for p1
 void convertP1() {
   reset = digitalRead(upPin);
   if((p1msec <= -1) && (p1sec >= 0)) {
@@ -125,11 +148,11 @@ void convertP1() {
         setup();
       }
     }
-  }
-
+  }  
 
 }
 
+//Converts the time to a usable integer for p2
 void convertP2() {
   reset = digitalRead(upPin);
   
@@ -174,6 +197,7 @@ void convertP2() {
 
 }
 
+//Takes care of inputs for the setup
 void menu() {
   rightState = digitalRead(rightPin);
   upState = digitalRead(upPin);
@@ -183,25 +207,28 @@ void menu() {
 
   if(rightState == LOW) {
     place += 1;
+    debounce(rightState, rightPin);
    }
-  if(place > 4) {
-    place = 0;
-  }
-  
+ 
   if(upState == LOW && place == 0) {
     t10min += 1;
+    debounce(upState, upPin);
   }
   if(upState == LOW && place == 1) {
     tmin += 1;
+    debounce(upState, upPin);
   }
   if(upState == LOW && place == 2) {
     t10sec += 1;
+    debounce(upState, upPin);
   }
   if(upState == LOW && place == 3) {
     tsec += 1;
+    debounce(upState, upPin);
   }
   if(upState == LOW && place == 4) {
     inc += 1;
+    debounce(upState, upPin);
   }
 
 
@@ -222,19 +249,39 @@ void menu() {
 
   if(p1 == LOW) {
     sTurn = 0;
+    debounce(p1, p1TurnPin);
   } else if (p2 == LOW) {
     sTurn = 1;
+    debounce(p2, p2TurnPin);
   }
 
   
 if(sState == LOW) {
   mExit = 0;
+  debounce(sState, sPin);
 }
 
 
 }
+int cur = 0;
 
+//Removes "bounce" from the keys which makes sure everytime a key is pressed
+//the value only increases by 1
+void debounce(int state, int pin) {
+  while(cur <= 3) {
+    state = digitalRead(pin);
+    delay(1);
+    if(state == HIGH) {
+      cur += 1;
+    }
+  }
+  cur = 0;
+  pMenu();
+  pMenu();
+  delay(100);
+}
 
+//The display during a game, doesn't change after the game starts
 void pGame() {
   lcd.clear();
   if(sTurn % 2 == 0) {
@@ -255,7 +302,7 @@ void pGame() {
   lcd.print("White");
   }
 }
-
+//The display for the time during the game, changes
 void pCurrent() {
   if(sTurn % 2 == 0) {
   lcd.setCursor(0,1);
@@ -326,9 +373,17 @@ void pCurrent() {
   }
 }
 
+//The main setup function
 void setup()
 {
-  pauseState = true;
+  t10min = 0;
+  tmin = 0;
+  t10sec = 0;
+  tsec = 0;
+  inc = 0;
+  place = 0;
+  startState = true;
+  pauseState = false;
   mExit = true;
   pinMode(p1TurnPin,INPUT_PULLUP);
   pinMode(p2TurnPin,INPUT_PULLUP);
@@ -338,58 +393,60 @@ void setup()
   lcd.init();// initialize the lcd 
   Serial.begin(9600);
   lcd.backlight();
-  lcd.print("Chess Clock");
+  lcd.setCursor(2,0);
+  lcd.print("Chess Clock!");
+  lcd.setCursor(0,1);
+  lcd.print("Iguanx on github");
   delay(2000);
 
+  pMenu();
   while(mExit) {
     menu();
-    pMenu();
-    delay(150);
   }
   
   t10min = t10min * 10;
   t10sec = t10sec * 10;
-  
-  
+   
   p1min = t10min + tmin;
   p2min = t10min + tmin;
   p1sec = t10sec + tsec;
   p2sec = t10sec + tsec;
 
-  
-
-
   pGame();
+  pCurrent();
 
   delay(150);
 }
 
+//Main loop that occurs during the game
 void loop()
 {
       p1 = digitalRead(p1TurnPin);
       p2 = digitalRead(p2TurnPin);
       pause = digitalRead(sPin);
 
-      //Code to start the game by white moving then the clock starts
-      while(pauseState == true) {
+      //Code to start the game by black pressing their side and white's time starting
+      while(startState == true) {
         p1 = digitalRead(p1TurnPin);
         p2 = digitalRead(p2TurnPin);
         pCurrent();
         delay(1);
         if(sTurn % 2 == 1) {
           if(p1 == LOW) {
-          pauseState = false;
+          startState = false;
           pTurn++;
         }
         } else if(sTurn % 2 == 0){
           if(p2 == LOW) {
-            pauseState = false;
+            startState = false;
           }
         }
      }
 
   unsigned long currentMillis = millis();
   //Using blink without delay code to make no delay when turn is switched
+  //Makes sure the time is kept as accurately as possible
+  
   //Immediately switch the players turn, before there was a delay until the second ended.
   if(currentMillis - previousMillis >= 10) {
     previousMillis = currentMillis;
@@ -430,7 +487,7 @@ void loop()
 
   
 
-  //Code to pause the timer
+  //Allows the timer to be paused during a game and ended if someone won.
 
   if(pause == LOW) {
     pauseState = true;
@@ -452,7 +509,6 @@ void loop()
   }
   }
 
-  
   pCurrent();
   convertP1();
   convertP2();
